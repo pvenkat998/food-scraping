@@ -57,9 +57,9 @@ if __name__ == '__main__':
            if shuffle:
                random.shuffle(self.files)
            self.length = len(self.files)
-           with open(os.path.join(root, "all_labels.json"), "r") as f:
+           with open(os.path.join(root, "all_labels.json"), "r", encoding="utf8") as f:
                self.all_labels = json.load(f)
-           with open(os.path.join(root, "labels_count2.json"), "r") as f:
+           with open(os.path.join(root, "labels_count2.json"), "r", encoding="utf8") as f:
                self.labels_count = json.load(f)
            self.num_to_label = []
            for a_key in self.labels_count.keys():
@@ -72,7 +72,7 @@ if __name__ == '__main__':
            self.label_len = len(self.num_to_label)
        
        def read_ingredients(self, file_name):
-           with open(file_name, "r") as f:
+           with open(file_name, "r", encoding="utf8") as f:
                new_labels = f.read().split('\n')
            real_labels = []
            for label in new_labels:
@@ -131,7 +131,7 @@ if __name__ == '__main__':
     dataset_sizes = { len(image_datasets) }
     class_names = ['pizza','pasta']
 
-    device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def imshow(inp, title=None):
         """Imshow for Tensor."""
@@ -197,7 +197,7 @@ if __name__ == '__main__':
 
                 # Iterate over data.
                 if phase== 'val':
-                    for uuid,inputs, labels in dataloaders_val:
+                    for i, (uuid,inputs, labels) in enumerate(dataloaders):
                         inputs = inputs.to(device)
                         labels = labels.to(device)
 
@@ -209,16 +209,23 @@ if __name__ == '__main__':
                         with torch.set_grad_enabled(phase == 'train'):
                             outputs = model(inputs)
                             _, preds = torch.max(outputs, 1)
-                            loss = criterion(outputs, labels)
-
+                            loss = criterion(torch.sigmoid(outputs), labels)
+                            if (i % 100 == 0):
+                                print('loss', loss)
+                                torch.save({
+                                'epoch': epoch,
+                                'model_state_dict': model.state_dict(),
+                                'optimizer_state_dict': optimizer.state_dict(),
+                                'loss': loss,
+                                }, 'models/'+str(epoch)+'.pt')
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
                                 optimizer.step()
 
                         # statistics
-                        running_loss += loss.item() * inputs.size(0)
-                        running_corrects += torch.sum(preds == labels.data)
+                       # running_loss += loss.item() * inputs.size(0)
+                       # running_corrects += torch.sum(preds == labels.data)
                 elif phase== 'train':
                     for i, (uuid,inputs, labels) in enumerate(dataloaders):
                         inputs = inputs.to(device)
@@ -238,7 +245,12 @@ if __name__ == '__main__':
                             
                             if (i % 100 == 0):
                                 print('loss', loss)
-                                torch.save(model.state_dict(), 'models/'+str(epoch)+'.pt')
+                                torch.save({
+                                'epoch': epoch,
+                                'model_state_dict': model.state_dict(),
+                                'optimizer_state_dict': optimizer.state_dict(),
+                                'loss': loss,
+                                }, 'models/'+str(epoch)+'.pt')
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
@@ -315,16 +327,27 @@ if __name__ == '__main__':
     # Here the size of each output sample is set to 2.
     # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
     model_ft.fc = nn.Linear(num_ftrs,329)
+    # Observe that all parameters are being optimized
+    """ 
+    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+    
 
+    model_ft = model_ft.to(device) """
     model_ft = model_ft.to(device)
-
-    ###torch.load(filename)
+    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+    try:
+        checkpoint = torch.load('models/0.pt')
+        model_ft.load_state_dict(checkpoint['model_state_dict'])
+        optimizer_ft.load_state_dict(checkpoint['optimizer_state_dict'])
+        
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+        print('epoch :{} loss: {}'.format(epoch,loss))
+    except:
+        print('no files')
 
     #criterion = nn.CrossEntropyLoss()
     criterion = nn.BCELoss()
-    # Observe that all parameters are being optimized
-    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
-    
     # Decay LR by a factor of 0.1 every 7 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
