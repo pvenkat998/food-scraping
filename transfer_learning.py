@@ -16,6 +16,7 @@ from skimage import io, transform
 import json
 import glob
 import re
+import tensorflow as tf
 #from config import Config
 if __name__ == '__main__':
     plt.ion()  
@@ -118,8 +119,9 @@ if __name__ == '__main__':
         extension='.jpg',
         shuffle_frames=True,
         subset_size=140000,transform=data_transforms['val']
-              ,phase=True)
+              ,phase=False)
     print(image_datasets)
+    print(image_datasets_val)
     dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=4,
                                                 shuffle=True)
 
@@ -271,17 +273,28 @@ if __name__ == '__main__':
         # load best model weights
         model.load_state_dict(best_model_wts)
         return model
-    def visualize_model(model, num_images=6):
+    def visualize_model(model, datasetname, num_images=6):
         was_training = model.training
         model.eval()
         images_so_far = 0
+        print(plt.rcParams['font.family']) #現在使用しているフォントを表示
+        plt.rcParams['font.family'] = ['IPAexGothic']
+        print(plt.rcParams['font.family']) #現在使用しているフォントを表示
         fig = plt.figure()
-
         with torch.no_grad():
-            for i, (inputs, labels) in enumerate(dataloaders['val']):
+            for i, (uuid,inputs, labels) in enumerate(dataloaders_val):
+                print(uuid)
                 inputs = inputs.to(device)
                 labels = labels.to(device)
+                #print(labels.tolist())
+                ing_list=[]
+                for i in range(len(labels.tolist()[0])):
+                    if(labels[0][i])==1:
+                        #print(i)
+                        #print(datasetname.num_to_label[i])
+                        ing_list.append(datasetname.num_to_label[i])
 
+                print(ing_list)
                 outputs = model(inputs)
                 _, preds = torch.max(outputs, 1)
 
@@ -289,12 +302,13 @@ if __name__ == '__main__':
                     images_so_far += 1
                     ax = plt.subplot(num_images//2, 2, images_so_far)
                     ax.axis('off')
-                    ax.set_title('predicted: {}'.format(class_names[preds[j]]))
+                    ax.set_title(u'predicted: {}'.format(ing_list))
                     imshow(inputs.cpu().data[j])
 
                     if images_so_far == num_images:
                         model.train(mode=was_training)
                         return
+                time.sleep(100)
             model.train(mode=was_training)
     model_ft = models.resnet18(pretrained=True)
     num_ftrs = model_ft.fc.in_features
@@ -314,6 +328,5 @@ if __name__ == '__main__':
     # Decay LR by a factor of 0.1 every 7 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,
-                       num_epochs=25)
-   
+    #model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
+    visualize_model(model_ft,image_datasets_val)
