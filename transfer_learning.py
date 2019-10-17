@@ -17,6 +17,8 @@ import json
 import glob
 import re
 import tensorflow as tf
+import matplotlib.font_manager as fm
+
 #from config import Config
 if __name__ == '__main__':
     plt.ion()  
@@ -38,7 +40,7 @@ if __name__ == '__main__':
     }
     class FoodDataset(torch.utils.data.Dataset):
        """ Dataset object used to access the pre-processed VoxCelebDataset """
-       def __init__(self, root, extension='.jpg',shuffle=False, transform=None, shuffle_frames=False, subset_size=None,phase=True):
+       def __init__(self, root, extension='.jpg',shuffle=False, transform=True, shuffle_frames=False, subset_size=None,phase=True):
            """
            Instantiates the Dataset.
            :param root: Path to the folder where the pre-processed dataset is stored.
@@ -131,7 +133,7 @@ if __name__ == '__main__':
     dataset_sizes = { len(image_datasets) }
     class_names = ['pizza','pasta']
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
 
     def imshow(inp, title=None):
         """Imshow for Tensor."""
@@ -181,6 +183,8 @@ if __name__ == '__main__':
         best_model_wts = copy.deepcopy(model.state_dict())
         best_acc = 0.0
 
+        m = nn.Sigmoid()
+
         for epoch in range(num_epochs):
             print('Epoch {}/{}'.format(epoch, num_epochs - 1))
             print('-' * 10)
@@ -208,6 +212,7 @@ if __name__ == '__main__':
                         # track history if only in train
                         with torch.set_grad_enabled(phase == 'train'):
                             outputs = model(inputs)
+                            outputs = m(outputs)
                             _, preds = torch.max(outputs, 1)
                             loss = criterion(torch.sigmoid(outputs), labels)
                             if (i % 100 == 0):
@@ -217,7 +222,7 @@ if __name__ == '__main__':
                                 'model_state_dict': model.state_dict(),
                                 'optimizer_state_dict': optimizer.state_dict(),
                                 'loss': loss,
-                                }, 'models/'+str(epoch)+'.pt')
+                                }, 'models_sig/'+str(epoch)+'.pt')
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
@@ -238,6 +243,9 @@ if __name__ == '__main__':
                         # track history if only in train
                         with torch.set_grad_enabled(phase == 'train'):
                             outputs = model(inputs)
+
+                            outputs = m(outputs)
+
                             _, preds = torch.max(outputs, 1)
                            # print(outputs.dtype)
                            # print(labels.dtype)
@@ -250,7 +258,7 @@ if __name__ == '__main__':
                                 'model_state_dict': model.state_dict(),
                                 'optimizer_state_dict': optimizer.state_dict(),
                                 'loss': loss,
-                                }, 'models/'+str(epoch)+'.pt')
+                                }, 'models_sig/'+str(epoch)+'.pt')
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
@@ -288,45 +296,54 @@ if __name__ == '__main__':
     def visualize_model(model, datasetname, num_images=6):
         was_training = model.training
         model.eval()
+        m=nn.Sigmoid()
         images_so_far = 0
         print(plt.rcParams['font.family']) #現在使用しているフォントを表示
-        plt.rcParams['font.family'] = ['IPAexGothic']
+        plt.rcParams['font.family'] = ['sans-serif']
+        plt.rcParams['font.sans-serif'] = ['Hiragino Maru Gothic Pro', 'Yu Gothic', 'Meirio', 'Takao', 'IPAexGothic', 'IPAPGothic', 'VL PGothic', 'Noto Sans CJK JP']
         print(plt.rcParams['font.family']) #現在使用しているフォントを表示
         fig = plt.figure()
         with torch.no_grad():
             for i, (uuid,inputs, labels) in enumerate(dataloaders_val):
                 print(uuid)
+                print(i)
+                fm.findSystemFonts()
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-                #print(labels.tolist())
-                ing_list=[]
-                for i in range(len(labels.tolist()[0])):
-                    if(labels[0][i])==1:
-                        #print(i)
-                        #print(datasetname.num_to_label[i])
-                        ing_list.append(datasetname.num_to_label[i])
-
-                print(ing_list)
                 outputs = model(inputs)
+                outputs = m(outputs)
                 _, preds = torch.max(outputs, 1)
+                outputs= outputs.to(device)
+              #  print(outputs)
+                #print(labels.tolist())
+
 
                 for j in range(inputs.size()[0]):
+                    ing_list=[]
+                    for i in range(len(outputs.tolist()[j])):
+                        if(outputs[j][i])>0.001:
+                            ing_list.append(datasetname.num_to_label[i])
+                    print(ing_list)
                     images_so_far += 1
                     ax = plt.subplot(num_images//2, 2, images_so_far)
                     ax.axis('off')
-                    ax.set_title(u'predicted: {}'.format(ing_list))
-                    imshow(inputs.cpu().data[j])
+                    if(len(ing_list)<10):
+                        ax.set_title(u'predicted: {}'.format(ing_list), fontname="sans-serif")
+                    else:
+                        ax.set_title(u'predicted: {} \n{}'.format(ing_list[0:9],ing_list[9:]), fontname="sans-serif")
 
+                    imshow(inputs.cpu().data[j])
                     if images_so_far == num_images:
+                        time.sleep(1000)
                         model.train(mode=was_training)
-                        return
-                time.sleep(100)
+                
             model.train(mode=was_training)
     model_ft = models.resnet18(pretrained=True)
     num_ftrs = model_ft.fc.in_features
     # Here the size of each output sample is set to 2.
     # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
     model_ft.fc = nn.Linear(num_ftrs,329)
+   
     # Observe that all parameters are being optimized
     """ 
     optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
@@ -336,7 +353,7 @@ if __name__ == '__main__':
     model_ft = model_ft.to(device)
     optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
     try:
-        checkpoint = torch.load('models/0.pt')
+        checkpoint = torch.load('models_sig/0.pt' ,map_location=torch.device('cpu'))
         model_ft.load_state_dict(checkpoint['model_state_dict'])
         optimizer_ft.load_state_dict(checkpoint['optimizer_state_dict'])
         
@@ -351,5 +368,5 @@ if __name__ == '__main__':
     # Decay LR by a factor of 0.1 every 7 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-    #model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
-    visualize_model(model_ft,image_datasets_val)
+    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
+    #visualize_model(model_ft,image_datasets_val)
