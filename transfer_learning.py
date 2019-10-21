@@ -310,6 +310,8 @@ if __name__ == '__main__':
                 fm.findSystemFonts()
                 inputs = inputs.to(device)
                 labels = labels.to(device)
+                print("read labels")
+                print(labels)
                 outputs = model(inputs)
                 outputs = m(outputs)
                 _, preds = torch.max(outputs, 1)
@@ -321,16 +323,25 @@ if __name__ == '__main__':
                 for j in range(inputs.size()[0]):
                     ing_list=[]
                     for i in range(len(outputs.tolist()[j])):
-                        if(outputs[j][i])>0.001:
+                        if(outputs[j][i])>0.009:
                             ing_list.append(datasetname.num_to_label[i])
                     print(ing_list)
                     images_so_far += 1
                     ax = plt.subplot(num_images//2, 2, images_so_far)
                     ax.axis('off')
-                    if(len(ing_list)<10):
+                    i=len(ing_list)//2
+                    #Ing
+#                    item_path=glob.glob(os.path.join(os.path.join(root,'test'),uuid ))
+                    ingredients_path = os.path.join(uuid[j], "ingredients.txt")  
+                    np_y = self.read_ingredients(ingredients_path)
+                    print(np_y)
+                    #end Ing
+                    if(len(ing_list)<5):
                         ax.set_title(u'predicted: {}'.format(ing_list), fontname="sans-serif")
+                #    elif(len(ing_list)<16):
+                 #       ax.set_title(u'predicted: {} \n{}'.format(ing_list[0:7],ing_list[7:15]), fontname="sans-serif")
                     else:
-                        ax.set_title(u'predicted: {} \n{}'.format(ing_list[0:9],ing_list[9:]), fontname="sans-serif")
+                        ax.set_title(u'predicted: {} \n{}'.format(ing_list[0:i],ing_list[i:]), fontname="sans-serif")
 
                     imshow(inputs.cpu().data[j])
                     if images_so_far == num_images:
@@ -342,6 +353,7 @@ if __name__ == '__main__':
     num_ftrs = model_ft.fc.in_features
     # Here the size of each output sample is set to 2.
     # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
+#    model_ft.fc = nn.Linear(num_ftrs,329)
     model_ft.fc = nn.Linear(num_ftrs,329)
    
     # Observe that all parameters are being optimized
@@ -353,7 +365,7 @@ if __name__ == '__main__':
     model_ft = model_ft.to(device)
     optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
     try:
-        checkpoint = torch.load('models_sig/0.pt' ,map_location=torch.device('cpu'))
+        checkpoint = torch.load('models_sig/24.pt' ,map_location=torch.device('cpu'))
         model_ft.load_state_dict(checkpoint['model_state_dict'])
         optimizer_ft.load_state_dict(checkpoint['optimizer_state_dict'])
         
@@ -368,5 +380,5 @@ if __name__ == '__main__':
     # Decay LR by a factor of 0.1 every 7 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
-    #visualize_model(model_ft,image_datasets_val)
+    #model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
+    visualize_model(model_ft,image_datasets_val)
