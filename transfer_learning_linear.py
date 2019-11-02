@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 from __future__ import print_function, division
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,12 +18,11 @@ import glob
 import re
 import tensorflow as tf
 import matplotlib.font_manager as fm
-
-#from config import Config
 if __name__ == '__main__':
-    plt.ion()  
+    plt.ion() 
+    #画像データの標本化
     # Data augmentation and normalization for training
-    # Just normalization for validation
+    # normalization for validation
     data_transforms = {
         'train': transforms.Compose([
             transforms.RandomResizedCrop(224),
@@ -38,6 +37,7 @@ if __name__ == '__main__':
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]),
     }
+    #データセットを用意する。
     class FoodDataset(torch.utils.data.Dataset):
        """ Dataset object used to access the pre-processed VoxCelebDataset """
        def __init__(self, root, extension='.jpg',shuffle=False, transform=True, shuffle_frames=False, subset_size=None,phase=True):
@@ -72,7 +72,8 @@ if __name__ == '__main__':
                self.label_to_num[self.num_to_label[i]] = i
            
            self.label_len = len(self.num_to_label)
-       
+       #食材を食材リストから読み取る
+       #全部のラベルとの辞書を使ってall_labels.json、当てはまる、ラベルの位置を指定する。
        def read_ingredients(self, file_name):
            with open(file_name, "r", encoding="utf8") as f:
                new_labels = f.read().split('\n')
@@ -82,7 +83,7 @@ if __name__ == '__main__':
                label = label.replace(' ', '')
                if label != "":
                    real_labels.append(label)
-
+            #ラベルの値を０か１に設定する、食材があるかないによって。。
            np_labels = np.zeros(self.label_len)
            for real_label in real_labels:
                processed_label = self.all_labels[real_label]
@@ -94,7 +95,7 @@ if __name__ == '__main__':
                except:
                     pass
                
-               
+               #食材ありなし（ラベル）リストを返す
            return np_labels
        def __len__(self):
            return self.length
@@ -110,31 +111,20 @@ if __name__ == '__main__':
            np_y = self.read_ingredients(ingredients_path)
            torch_y = torch.from_numpy(np_y).float()
            return uuid, torch_x, torch_y
+    #Class定義の終わりー
+    #使うデータの初期設定
     data_dir = 'data'
-    image_datasets = FoodDataset(root=data_dir,
-        extension='.jpg',
-        shuffle_frames=True,
-        subset_size=140000,transform=data_transforms['train']
-              ,phase=True)
-
-    image_datasets_val = FoodDataset(root=data_dir,
-        extension='.jpg',
-        shuffle_frames=True,
-        subset_size=140000,transform=data_transforms['val']
-              ,phase=False)
+    image_datasets = FoodDataset(root=data_dir,extension='.jpg',shuffle_frames=True,subset_size=140000,transform=data_transforms['train'],phase=True)
+    image_datasets_val = FoodDataset(root=data_dir, extension='.jpg',shuffle_frames=True,subset_size=140000,transform=data_transforms['val'],phase=False)
     print(image_datasets)
     print(image_datasets_val)
-    dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=4,
-                                                shuffle=True)
-
-    dataloaders_val = torch.utils.data.DataLoader(image_datasets_val, batch_size=4,
-                                                shuffle=True)
-                
+    #Training用のデータを用意する
+    dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=4,shuffle=True)
+    #Validation用のデータを用意する
+    dataloaders_val = torch.utils.data.DataLoader(image_datasets_val, batch_size=4,shuffle=True)
     dataset_sizes = { len(image_datasets) }
-    class_names = ['pizza','pasta']
-
     device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
-
+    #Imshowは画像と材料を出力に使う関数です。
     def imshow(inp, title=None):
         """Imshow for Tensor."""
         inp = inp.numpy().transpose((1, 2, 0))
@@ -145,9 +135,9 @@ if __name__ == '__main__':
         plt.imshow(inp)
         if title is not None:
             plt.title(title)
-        plt.pause(1)  # pause a bit so that plots are updated
-    #iter(torch.utils.data.DataLoader(dataloaders)).next()
-
+        plt.pause(1) 
+        # pause a bit so that plots are updated
+    #入力データを一個ずつ読む
     for i_batch, (real_idx, images,labely) in enumerate(dataloaders):
         #print(i_batch, real_idx, images,labely)
         print(images.size())
@@ -162,52 +152,38 @@ if __name__ == '__main__':
             plt.ioff()
             plt.show()
             break
-
-        
         for (batch_num,inputs) in enumerate(dataloaders):
             print('batch_num'+str(batch_num))
             print('input'+str(inputs))
         # Make a grid from batch
     labely, inputs, classes = next(iter(dataloaders))
-
 # Make a grid from batch
     out = torchvision.utils.make_grid(inputs)
- #   imshow(out)
-
-
-    # Get a batch of training data
-#    inputs, classes = enumerate(dataloaders)
+    #モデル学習の分
     def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
         since = time.time()
-
         best_model_wts = copy.deepcopy(model.state_dict())
         best_acc = 0.0
-
-      #  m = nn.Sigmoid()
-
+        #Epoch数の回数でループします。
         for epoch in range(num_epochs):
             print('Epoch {}/{}'.format(epoch, num_epochs - 1))
             print('-' * 10)
-
+            #TrainingとValidationの２つのPhaseに分ける。
             # Each epoch has a training and validation phase
             for phase in ['train', 'val']:
                 if phase == 'train':
                     model.train()  # Set model to training mode
                 else:
                     model.eval()   # Set model to evaluate mode
-
                 running_loss = 0.0
                 running_corrects = 0
-
-                # Iterate over data.
+                # PhaseがValidationの場合に以下を実行するように
                 if phase== 'val':
                     for i, (uuid,inputs, labels) in enumerate(dataloaders):
                         inputs = inputs.to(device)
                         labels = labels.to(device)
-
                         # zero the parameter gradients
                         optimizer.zero_grad()
-
                         # forward
                         # track history if only in train
                         with torch.set_grad_enabled(phase == 'train'):
@@ -221,76 +197,43 @@ if __name__ == '__main__':
                                 'model_state_dict': model.state_dict(),
                                 'optimizer_state_dict': optimizer.state_dict(),
                                 'loss': loss,
-                                }, 'models_sig/'+str(epoch)+'.pt')
+                                }, 'models/'+str(epoch)+'.pt')
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
                                 optimizer.step()
-
-                        # statistics
-                       # running_loss += loss.item() * inputs.size(0)
-                       # running_corrects += torch.sum(preds == labels.data)
+                # PhaseがTrainingの場合に以下を実行するように
                 elif phase== 'train':
                     for i, (uuid,inputs, labels) in enumerate(dataloaders):
                         inputs = inputs.to(device)
                         labels = labels.to(device)
-
                         # zero the parameter gradients
                         optimizer.zero_grad()
-
                         # forward
                         # track history if only in train
                         with torch.set_grad_enabled(phase == 'train'):
                             outputs = model(inputs)
-
-
                             _, preds = torch.max(outputs, 1)
                            # print(outputs.dtype)
                            # print(labels.dtype)
                             loss = criterion(torch.sigmoid(outputs), labels)
-                            
                             if (i % 100 == 0):
                                 print('loss', loss)
-                                torch.save({
-                                'epoch': epoch,
-                                'model_state_dict': model.state_dict(),
-                                'optimizer_state_dict': optimizer.state_dict(),
-                                'loss': loss,
-                                }, 'models_sig/'+str(epoch)+'.pt')
+                                torch.save({'epoch': epoch,'model_state_dict': model.state_dict(),'optimizer_state_dict': optimizer.state_dict(),'loss': loss,}, 'models_sig/'+str(epoch)+'.pt')
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
                                 optimizer.step()
-
-                        # statistics
-                        #running_loss += loss.item() * inputs.size(0)
-                        #running_corrects += torch.sum(preds == labels.data)
-
-
                 if phase == 'train':
                     scheduler.step()
-
-                #epoch_loss = running_loss / dataset_sizes[phase]
-                #epoch_acc = running_corrects.double() / dataset_sizes[phase]
-
-                #print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                 #   phase, epoch_loss, epoch_acc))
-
-                # deep copy the model
-                #if phase == 'val' and epoch_acc > best_acc:
-                #    best_acc = epoch_acc
-                #    best_model_wts = copy.deepcopy(model.state_dict())
-
-            #print()
-
         time_elapsed = time.time() - since
         print('Training complete in {:.0f}m {:.0f}s'.format(
             time_elapsed // 60, time_elapsed % 60))
-        #print('Best val Acc: {:4f}'.format(best_acc))
-
         # load best model weights
+        #一番良いモデルを選択する
         model.load_state_dict(best_model_wts)
         return model
+    #モデルをランダムなイメージをInputとして、モデルを通す
     def visualize_model(model, datasetname, num_images=6):
         was_training = model.training
         model.eval()
@@ -309,16 +252,12 @@ if __name__ == '__main__':
                 labels = labels.to(device)
                 outputs = model(inputs)
                 print(outputs)
-
                 _, preds = torch.max(outputs, 1)
                 outputs= outputs.to(device)
-              #  print(outputs)
-                #print(labels.tolist())
-
-
                 for j in range(inputs.size()[0]):
                     ing_list=[]
                     for i in range(len(outputs.tolist()[j])):
+                        #-1.5より大きいTensorであれば、食材として判断する
                         if(outputs[j][i])>-1.5:
                             ing_list.append(datasetname.num_to_label[i])
                     print(ing_list)
@@ -326,49 +265,40 @@ if __name__ == '__main__':
                     ax = plt.subplot(num_images//2, 2, images_so_far)
                     ax.axis('off')
                     i=len(ing_list)//2
+                    #食材名を出力する。
                     if(len(ing_list)<5):
                         ax.set_title(u'predicted: {}'.format(ing_list), fontname="sans-serif")
-                #    elif(len(ing_list)<16):
-                 #       ax.set_title(u'predicted: {} \n{}'.format(ing_list[0:7],ing_list[7:15]), fontname="sans-serif")
                     else:
                         ax.set_title(u'predicted: {} \n{}'.format(ing_list[0:i],ing_list[i:]), fontname="sans-serif")
-
                     imshow(inputs.cpu().data[j])
                     if images_so_far == num_images:
-                        time.sleep(1000)
+                        plt.pause(10000)
+                        exit()
                         model.train(mode=was_training)
                 
             model.train(mode=was_training)
+    #基本モデルの設定、この場合はResnet18を使いました。
     model_ft = models.resnet18(pretrained=True)
     num_ftrs = model_ft.fc.in_features
-    # Here the size of each output sample is set to 2.
-    # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
-#    model_ft.fc = nn.Linear(num_ftrs,329)
     model_ft.fc = nn.Linear(num_ftrs,329)
-   
-    # Observe that all parameters are being optimized
-    """ 
-    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
-    
-
-    model_ft = model_ft.to(device) """
     model_ft = model_ft.to(device)
+    # Observe that all parameters are being optimized
     optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
     try:
         checkpoint = torch.load('models/24.pt' ,map_location=torch.device('cpu'))
         model_ft.load_state_dict(checkpoint['model_state_dict'])
         optimizer_ft.load_state_dict(checkpoint['optimizer_state_dict'])
-        
         epoch = checkpoint['epoch']
         loss = checkpoint['loss']
         print('epoch :{} loss: {}'.format(epoch,loss))
     except:
         print('no files')
-
     #criterion = nn.CrossEntropyLoss()
     criterion = nn.BCELoss()
     # Decay LR by a factor of 0.1 every 7 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
-
-    #model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
+    #学習用は以下のコメントされたコードをアンコメントすれば実行される。
+   # model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
+   
+    #実行するとランダムに選択された画像イメージはモデルに通して食材を判別する。
     visualize_model(model_ft,image_datasets_val)
